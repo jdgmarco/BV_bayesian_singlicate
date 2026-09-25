@@ -3,7 +3,7 @@
 INPUT_FILE <- "examples/simulated_amino_acids.xlsx"
 MEASUREMENTS_SHEET <- "Measurements"
 ANALYTES_SHEET <- "Analytes"
-MODE <- "validate"                    # "validate" or "fit"
+MODE <- "fit"                    # "validate" or "fit"
 OUTPUT_ROOT <- "output"
 
 # NULL means all analytes / all group labels in the workbook.
@@ -23,8 +23,8 @@ RUN_ANOVA_BOOTSTRAP <- TRUE
 RUN_TREND <- TRUE
 TREND_EXCLUDE <- TRUE                 # global AND individual trend required
 RUN_OUTLIERS_ANOVA <- TRUE            # removes entire subjects for this analyte
-RUN_SENSITIVITY <- TRUE
-MAKE_PLOTS <- TRUE
+RUN_SENSITIVITY <- FALSE              # Be patient with this one... necessary to validate priors
+MAKE_PLOTS <- TRUE                   
 SAVE_FITS <- FALSE                   # TRUE saves the large Stan fit objects
 OUTPUT_DETAIL <- FALSE               # TRUE exports raw draws, bootstrap draws and per-fit data
 
