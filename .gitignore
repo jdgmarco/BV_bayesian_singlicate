@@ -1,0 +1,14 @@
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+output/
+*.rds
+*.rda
+*.o
+*.so
+*.dll
+input/*
+!input/study_template.xlsx
+~$*.xlsx
+.DS_Store
