@@ -12,3 +12,4 @@ input/*
 !input/study_template.xlsx
 ~$*.xlsx
 .DS_Store
+output/*
