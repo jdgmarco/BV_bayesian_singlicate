@@ -1,9 +1,9 @@
 # EDIT THIS FILE AND YOUR INPUT WORKBOOK. All paths are relative to the project.
 # Default: validate the simulated example without running any model.
-INPUT_FILE <- "simulated_amino_acids.xlsx"
+INPUT_FILE <- "examples/simulated_amino_acids.xlsx"
 MEASUREMENTS_SHEET <- "Measurements"
 ANALYTES_SHEET <- "Analytes"
-MODE <- "fit"                    # "validate" or "fit"
+MODE <- "validate"                    # "validate" or "fit"
 OUTPUT_ROOT <- "output"
 
 # NULL means all analytes / all group labels in the workbook.
