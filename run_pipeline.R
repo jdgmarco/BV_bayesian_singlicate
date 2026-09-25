@@ -3,7 +3,7 @@
 local({
   if (!file.exists("config.R")) stop("Run from the extracted project folder (or open bv_pipeline.Rproj).")
   source("config.R", local = TRUE)
-  args <- commandArgs(trailingOnly = TRUE)
+  args <- if (interactive()) character() else commandArgs(trailingOnly = TRUE)
   if (length(args) > 0) MODE <- args[1]
   if (length(args) > 1) INPUT_FILE <- args[2]
   if (!MODE %in% c("validate", "fit")) stop("MODE must be validate or fit.")
