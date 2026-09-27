@@ -1,5 +1,13 @@
 # Changes from JDG v7.26
 
+## Execution repair — 27 September 2026
+
+- Restored the missing `summarise_subjects()` helper required by the runner and
+  participant figure. It computes the same five posterior quantiles in percent
+  and maps them to the original participant IDs.
+- Added a fixed-draw regression check for this failure. Execution in R remains
+  pending; the preparation environment does not have R.
+
 ## Sharing adaptation, 25 September 2026
 
 ### Interface and organisation
@@ -9,7 +17,7 @@
 - Added explicit group pooling/selection and analyte selection. One prior row is shared across groups.
 - Added strict input checks, a validation-only mode, parameter/data snapshots, failure logs and fit checkpoints.
 - Removed steroid-specific plot exclusions, menstrual-field dependencies and fixed sex labels.
-- Simplified figures to population estimates, participant CVP and population-CVI sensitivity; original pooled-density graphics and their winsorisation are not reproduced.
+- The first adaptation simplified the figures. The restoration below supersedes that change.
 - Kept the supplied v7.26 file untouched. This is a separate adaptation.
 
 ### Changes that may affect estimates
@@ -26,7 +34,7 @@
 - Updated Stan array syntax; compile one model and reuse it across fits.
 - Save `mu` and `mu_subject` draws as well as the original parameter set so convergence summaries cover the location parameters too.
 - Export diagnostics for every sensitivity fit.
-- Rename the misleading Bayesian `N_final` output to `N_quantified` and distinguish it from all observations used by the model.
+- The first adaptation renamed the Bayesian `N_final` column; the restoration below brings back the original name. It counts quantified observations, while `N_obs` also includes censored observations used by the model.
 - Do not treat historical `cv_*` parameter names as literal CVs; many represent log-scale SDs.
 
 No full-dataset numerical equivalence claim is made. The supplied results workbook contains only four actual example rows.
@@ -35,3 +43,14 @@ No full-dataset numerical equivalence claim is made. The supplied results workbo
 
 - Shortened `README.md` to the steps Deniz needs; moved the full instructions to `docs/TECHNICAL_NOTES.md`.
 - By default, only summaries and review files are exported. `OUTPUT_DETAIL <- TRUE` restores intermediate data and draw exports; `SAVE_FITS <- TRUE` restores saved Stan fits. These settings change files written, not estimates.
+- Resolved a bare workbook name against `input/` and `examples/` when unambiguous. With the simulated workbook in both locations, use its full project-relative path.
+- When sourced interactively in RStudio, ignore unrelated process arguments so `MODE` and `INPUT_FILE` in `config.R` are authoritative. Log the effective mode and input path on startup; `Rscript run_pipeline.R fit path.xlsx` still overrides them.
+
+## Output restoration (after comparison with v7.26)
+
+- Restored the original column names and calculation functions for both main Bayesian tables; copied the original optional ANOVA presentation-table builder and restored parameter-level and bootstrap-summary exports.
+- Restored the posterior CVI/prior density, subject summary, per-subject boxplot, three-method bootstrap comparison, and both sensitivity density figure families. Removed steroid-only exclusions. Display limits affect figures alone.
+- Set the default output to the original table families plus eligibility/status/diagnostic files; optional intermediate exports remain off.
+- Put an identical, tracked simulated workbook under both `input/` and `examples/`. Use an explicit path: its short name is now ambiguous.
+- Documented remaining changes that can alter estimates in `docs/OUTPUT_MAP.md`. No complete-study numerical equivalence or RStan run is claimed.
+- Removed the four-row actual athlete measurements workbook from the GitHub package; shared example values are fictional or simulated.

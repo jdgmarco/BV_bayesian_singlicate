@@ -1,5 +1,5 @@
 Version: 1.0
-ProjectId: cffb1c20-1651-4fde-90c3-7557e3459282
+ProjectId: 352d02ed-2d38-4716-8063-ea80237d866a
 
 RestoreWorkspace: No
 SaveWorkspace: No
@@ -12,5 +12,3 @@ Encoding: UTF-8
 
 RnwWeave: Sweave
 LaTeX: pdfLaTeX
-
-ProjectName: BV_BAYESIAN_SINGLICATE

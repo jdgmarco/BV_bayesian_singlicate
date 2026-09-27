@@ -1,6 +1,22 @@
 # Workbook ingestion and preflight checks. No statistical fitting in this file.
 abort <- function(...) stop(paste0(...), call. = FALSE)
 
+resolve_input_path <- function(path) {
+  if (identical(path, basename(path))) {
+    candidates <- c(path, file.path(c("input", "examples"), path))
+    found <- candidates[file.exists(candidates)]
+    if (length(found) == 1L) return(found)
+    if (length(found) > 1L)
+      abort("Ambiguous input workbook name: ", path,
+            ". Specify its path explicitly, e.g. input/", path,
+            " or examples/", path, ".")
+  }
+  if (file.exists(path)) return(path)
+  abort("Input workbook not found: ", path,
+        ". Run from the project folder and check INPUT_FILE in config.R. ",
+        "For the supplied example, use examples/simulated_amino_acids.xlsx.")
+}
+
 read_input_sheet <- function(path, sheet) {
   d <- as.data.frame(readxl::read_excel(path, sheet = sheet, col_types = "text",
                                       .name_repair = "minimal"),

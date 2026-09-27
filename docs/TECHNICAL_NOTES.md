@@ -15,7 +15,7 @@ This pipeline adapts Jorge Díaz-Garzón's steroid analysis (v7.26) for another 
 
    RStan also needs a working C++ toolchain. Follow the [official RStan installation guide](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started). The model uses modern `array[N]` Stan syntax.
 
-3. Run `source("run_pipeline.R")`. The default is **validation only**, using the simulated example. Inspect `input_eligibility.csv` in the reported output folder.
+3. Run `source("run_pipeline.R")`. The default is **validation only**, using `input/simulated_amino_acids.xlsx`. Inspect `input_eligibility.csv` in the reported output folder.
 4. To fit that example, set `MODE <- "fit"` in `config.R` and run the same command. For a first trial, setting `RUN_SENSITIVITY <- FALSE` and `RUN_ANOVA_BOOTSTRAP <- FALSE` reduces runtime. Restore them for the planned final analysis.
 5. Copy `input/study_template.xlsx` to `input/my_study.xlsx`, fill it in, and change `INPUT_FILE` in `config.R`. Run validation before fitting.
 
@@ -109,7 +109,7 @@ Trend screening uses quantified observations only, fits the supplied chronologic
 
 Cochran and Reed remove **all observations from a flagged participant for that analyte/group**. Cochran's critical-value calculation uses the corrected F degrees of freedom and an approximate common sample size (rounded mean); unequal series lengths remain a limitation. The original initial four-observation eligibility rule is not reimposed after ANOVA discards censored results. Review the exported ANOVA datasets and counts, especially with substantial censoring.
 
-Sensitivity scenarios: the default, tighter/wider biological priors (`weight_cvi` = 0.25/1.00), half/double biological prior centre, and half/double analytical prior centre or prior SD. These are one-at-a-time scenarios, not a factorial grid. If a source-specific weight is already below 0.25 or above 1.00, the inherited labels “tighter”/“wider” may not describe the ordering; compare the actual values or change the scenarios deliberately. Sensitivity figures show population CVI, with the same target as the sensitivity table.
+Sensitivity scenarios: the default, tighter/wider biological priors (`weight_cvi` = 0.25/1.00), half/double biological prior centre, and half/double analytical prior centre or prior SD. These are one-at-a-time scenarios, not a factorial grid. If a source-specific weight is already below 0.25 or above 1.00, the inherited labels “tighter”/“wider” may not describe the ordering; compare the actual values or change the scenarios deliberately. The sensitivity table shows the population CVI; the restored v7.26 density figures pool subject-specific CVI posterior draws, a different quantity.
 
 Inspect Rhat, ESS, divergences and tree-depth hits for **every fitted scenario**. Recorded settings and diagnostics do not by themselves validate a model. Participant CVP, heterogeneity and the typical population CVI have different interpretations. The athlete-study HBR threshold of approximately 22.7% is not hardcoded as a general decision threshold.
 
@@ -117,36 +117,38 @@ Inspect Rhat, ESS, divergences and tree-depth hits for **every fitted scenario**
 
 Every run creates a new folder under `output/`.
 
-Default output is kept to summaries, eligibility, exclusions, trend/status, diagnostics, sensitivity and figures. The intermediate exports named below are created only when `OUTPUT_DETAIL <- TRUE`; full fitted objects in `fits/` require `SAVE_FITS <- TRUE`. `input_used.xlsx`, `config_used.R` and `sessionInfo.txt` are kept for fit runs; validate runs write only the validation report and applicable exclusion rows. The original script emitted many more files; these switches change exports only, not the estimation.
+The default fit restores v7.26 tables and figure families, plus eligibility/status/diagnostic files. `OUTPUT_DETAIL <- TRUE` writes additional intermediate exports; `SAVE_FITS <- TRUE` writes Stan objects. `EXPORT_ANOVA_SUMMARY`, `EXPORT_TREND` and `EXPORT_OUTLIERS` opt in to the respective secondary tables/logs. `input_used.xlsx`, `config_used.R` and `sessionInfo.txt` are saved for fit runs. Validation does not run any model.
 
 | File | Meaning |
 |---|---|
 | `input_eligibility.csv` | Initial counts, missing data, censoring and group eligibility. |
 | `parsed_measurements.csv` (detail) | Imported results plus censoring flags; the `value` field holds a LoQ placeholder for censored rows. |
 | `excluded_subjects.csv` | Subjects removed by initial eligibility, trends, Cochran or Reed; absent when there are none. |
-| `trend_summary.csv`, `trend_by_subject.csv` | Global trends and, when triggered, individual trends. |
+| `trend_summary.csv`, `trend_by_subject.csv` (opt in) | Global trends and, when triggered, individual trends. |
 | `analysis_status.csv` | Fitted, failed and skipped stages; failure reasons are retained. |
 | `fit_###_bayes_data.csv`, `fit_###_anova_data.csv` (detail) | The actual observations sent to each estimator. |
-| `bayesian_summary_numeric.csv`, `bayesian_summary_formatted.csv` | Population CVI, CVG, II, RCV and heterogeneity summaries. CVs and RCVs are percentages. |
-| `subject_cvp_pct.csv` | Posterior CVP summaries for observed participants; these are not predictions for a new participant. |
+| `summary_table_numeric.csv`, `summary_table_formatted.csv` | Original v7.26 population CVI, CVG, II, RCV and heterogeneity tables and column names. |
+| `bayesian_results_by_sex.csv`, `dcvp_predicted_by_sex.csv` | Original parameter-level Stan summaries. |
+| `subject_cvp_pct.csv` (detail) | Posterior CVP summaries for observed participants; these are not predictions for a new participant. |
 | `new_participant_cvp_percentiles.csv` (detail) | Posterior summaries of the 20th, 50th and 80th percentiles of predicted CVP for a new participant under the hierarchy. These are population distribution percentiles, not concentration reference intervals. |
 | `bayesian_population_draws_pct.csv` (detail) | Draw-level population summaries, CVs/RCVs in percent. `sigma_total_log` is a log-scale SD and `II` is dimensionless. |
-| `anova_summary.csv` | Total within-subject CV, CVA-corrected biological CV, CVG, II and RCV, with bootstrap intervals where available. |
+| `anova_results_by_sex.csv`, `anova_bootstrap_summary.csv` | Original ANOVA point and cluster-bootstrap tables, CV values as fractions. |
+| `anova_summary_table_formatted.csv`, `anova_summary_table_numeric.csv` (opt in) | Original ANOVA presentation tables, percentages and bootstrap intervals. |
 | `anova_bootstrap_draws_fraction.csv` (detail) | Underlying bootstrap CVs as fractions, not percentages. |
-| `sensitivity_population_cvi.csv` | Population CVI under the nine scenarios, with numbers of observations and subjects. |
+| `sensitivity_table.csv` | Formatted population CVI for the nine prior scenarios, as in v7.26. |
 | `diagnostics.csv` | Rhat, effective sample size, divergences and maximum-tree-depth hits for main and sensitivity fits. |
 | `fits/*.rds` | Checkpoints containing main results with participant mapping, and individual sensitivity Stan fits. |
 | `input_used.xlsx`, `config_used.R`, `sessionInfo.txt` | Fit input, requested configuration and software environment. |
 | `effective_config.*`, `analyte_parameters.csv`, `sensitivity_scenarios.csv` (detail) | Effective settings and method parameters. |
 
-`N_used_in_model` includes quantified and censored observations. `N_quantified` counts only quantified observations. Concentration median/IQR fields retain the original descriptive convention of substituting LoQ for censored values; they are not censoring-adjusted concentration estimates.
+The original `N_obs` includes quantified and censored observations. The original `N_final` counts only quantified observations. Concentration median/IQR fields retain the original descriptive convention of substituting LoQ for censored values; they are not censoring-adjusted concentration estimates.
 
-Figures use arbitrary group labels and include all fitted analytes. There are no progesterone-specific exclusions or steroid-specific figure captions. Plot scales do not cap or winsorise posterior draws.
+Figures use arbitrary group labels and include all fitted analytes. There are no progesterone-specific exclusions or steroid-specific figure captions. Posterior and sensitivity density panels crop upper tails for display using `CV_MAX` and the configured panel quantile; per-subject boxplots also crop at `CV_MAX`. Method comparison uses an upper display limit. None of these limits alter estimates or CSVs. Figure types and differences from the source are listed in `docs/OUTPUT_MAP.md`.
 
 ## Supplied examples and provenance
 
-- `examples/simulated_amino_acids.xlsx`: 12 fictitious participants, six visits each, two groups and two analytes. All results, LoQs and priors are illustrative. **None are amino-acid reference estimates or method specifications.** Generated with NumPy `default_rng(20260925)`: log setpoints centred on 300 and 110 with SD 0.25; biological log SDs 0.18 and 0.23 multiplied by `exp(N(0,0.15))`; analytical log SD 0.05; Student-t residuals with 5 degrees of freedom, scaled to the total SD. Censoring at 5 and 70, respectively. Saved values are rounded to three decimals.
-- `examples/athletes_format_example.xlsx`: the four supplied athlete example rows, paired with their group labels and the 11 supplied steroid prior/LoQ rows. It is a format example and will correctly fail sample-size eligibility. `Visita` became `sample_order`; the trailing space in `11-deoxycortisol ` was removed. The source prior values were preserved; their source notes were transcribed rather than independently revalidated.
+- `input/simulated_amino_acids.xlsx` and its identical copy at `examples/simulated_amino_acids.xlsx`: 12 fictitious participants, six visits each, two groups and two analytes. All results, LoQs and priors are illustrative. **None are amino-acid reference estimates or method specifications.** Generated with NumPy `default_rng(20260925)`: log setpoints centred on 300 and 110 with SD 0.25; biological log SDs 0.18 and 0.23 multiplied by `exp(N(0,0.15))`; analytical log SD 0.05; Student-t residuals with 5 degrees of freedom, scaled to the total SD. Censoring at 5 and 70, respectively. Saved values are rounded to three decimals. Use an explicit path in `config.R`; the basename alone is ambiguous.
+- The supplied athlete source workbook contained four actual measurements; these are not distributed with the GitHub package. The shared input workbooks contain fictional values only.
 - `input/study_template.xlsx`: input template with one fictitious Alanine result and one matching row of fictitious priors and method parameters. Replace both example rows with your measurements and analyte-specific values, then validate. The single example observation is insufficient for BV estimation.
 
 Code origin: Jorge Díaz-Garzón, steroid BV pipeline v7.26 (August 2026), adapted from the Bayesian approach of Røraas et al., *Clinical Chemistry* 2019;65:995–1005. The accompanying athlete manuscript supplied for this adaptation is a working manuscript; no publication status or DOI is assigned here. Keep this provenance when reusing the code.

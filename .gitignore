@@ -9,7 +9,10 @@ output/
 *.so
 *.dll
 input/*
+!input/.gitkeep
 !input/study_template.xlsx
+!input/simulated_amino_acids.xlsx
+examples/athletes_format_example.xlsx
+/simulated_amino_acids.xlsx
 ~$*.xlsx
 .DS_Store
-output/*

@@ -3,6 +3,12 @@
 source("config.R")
 source("R/input.R")
 source("R/statistics.R")
+stopifnot(identical(resolve_input_path("input/simulated_amino_acids.xlsx"),
+                    "input/simulated_amino_acids.xlsx"),
+          identical(resolve_input_path("examples/simulated_amino_acids.xlsx"),
+                    "examples/simulated_amino_acids.xlsx"),
+          identical(resolve_input_path("study_template.xlsx"),
+                    "input/study_template.xlsx"))
 must_fail <- function(expr) {
   caught <- tryCatch({force(expr); FALSE}, error = function(e) TRUE)
   if (!caught) stop("Expected rejection did not occur.")
@@ -16,6 +22,7 @@ must_fail(parse_results("<0.2", .5, "limit mismatch"))
 must_fail(parse_results("0", .5, "zero"))
 must_fail(parse_results("text", .5, "invalid result"))
 must_fail(parse_results("<LoQ", NA_real_, "missing limit"))
+must_fail(resolve_input_path("simulated_amino_acids.xlsx"))
 stopifnot(parse_results("3", NA_real_, "no threshold")$censored == 0L)
 
 # Known Cochran threshold, k=15, n=10, alpha=.05: Ccrit ~= .17368445.
@@ -32,10 +39,6 @@ for (an in demo$analytes$analyte) for (gr in unique(demo$long$Sex)) {
   e <- eligible_dataset(d)
   stopifnot(e$reason == "eligible", e$n_subjects == 6L, e$n_obs == 36L)
 }
-athletes <- read_study_inputs("examples/athletes_format_example.xlsx")
-stopifnot(nrow(athletes$raw) == 4L, nrow(athletes$analytes) == 11L,
-          setequal(athletes$raw$sample_order, c(1, 4, 9, 11)),
-          "11-deoxycortisol" %in% names(athletes$raw))
 template <- read_study_inputs("input/study_template.xlsx")
 stopifnot(nrow(template$raw) == 1L, nrow(template$analytes) == 1L,
           template$analytes$analyte == "Alanine",

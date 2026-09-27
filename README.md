@@ -1,41 +1,15 @@
-# Biological variation pipeline — guide for Deniz
+# Bayesian biological variation (one measurement per sample)
 
-Use this R pipeline to estimate biological variation for amino acids or another analyte panel. It accepts **one analytical result per sample** and repeated samples per participant. The example values are fictitious.
+For Deniz: the example is fictional. Replace its values and priors before using results.
 
-## What to change
+1. Copy input/study_template.xlsx to input/my_study.xlsx. In **Measurements** replace the example row with one row per participant and visit: subject, group, chronological sample_order and one concentration column per amino acid.
+2. In **Analytes** put one row per concentration column. Use exactly matching analyte names; enter the unit, the method's **LoQ** (a LoD is not automatically a LoQ), prior CVI/CVG/CVA, their weights and sources. Enter 5 for 5%, not 0.05 or an Excel 5% cell. Replace every example value.
+3. In config.R set INPUT_FILE <- "input/my_study.xlsx" and MODE <- "validate"; open bv_pipeline.Rproj in RStudio and run source("run_pipeline.R"). Inspect the reported output/input_eligibility.csv, then set MODE <- "fit" and run the same command.
 
-1. Copy `input/study_template.xlsx` to `input/my_study.xlsx`. In **Measurements**, replace the example row with your data: `subject` (participant ID), `group` (e.g. Female/Male), `sample_order` (chronological visit number), then one concentration column per analyte. Keep the headers in row 1. Use one row per participant and visit.
-2. In **Analytes**, add exactly one row per analyte, with the same name as its column in Measurements. Enter its unit, **LoQ** (`loq`, in that unit), biological priors (`prior_cvi_pct`, `prior_cvg_pct`), method-specific analytical precision (`prior_cva_pct`), prior weights (`weight_cvi`, `weight_cvg`, `weight_cva`) and their sources. Enter CVs as numbers such as `5` for 5%, not as Excel percentages. **LoD is not automatically LoQ.** If no quantification threshold applies, leave `loq` blank.
-3. In `config.R`, set `INPUT_FILE <- "input/my_study.xlsx"`. Select `MODE <- "validate"` first; set `MODE <- "fit"` when the input checks pass. Review the other options only if your design requires them.
+The ready-to-run simulated workbook is at **input/simulated_amino_acids.xlsx** and also at examples/simulated_amino_acids.xlsx. Use the full path in config.R; a bare name is ambiguous. The input folder and its example files are included in GitHub; input/my_study.xlsx and output/ are ignored by Git.
 
-The supplied Alanine row shows **format only**. Its result, LoQ, CVs, weights and source notes must be replaced with values appropriate to your analyte and assay. The one example observation is insufficient for estimation. By default, analysis needs at least **four valid visits per participant** and **five participants per analyte/group**; see `MIN_OBS_PER_SUBJECT` and `MIN_SUBJECTS` in `config.R`.
+Install once: install.packages(c("readxl", "dplyr", "lme4", "rstan", "ggplot2")). RStan needs a working C++ toolchain. Fit can be slow with RUN_SENSITIVITY and RUN_ANOVA_BOOTSTRAP enabled.
 
-## Run
+The default fit writes v7.26-shaped summary_table_formatted.csv, summary_table_numeric.csv, ANOVA and parameter tables, and the original figure families (posterior densities, subject CVI, method comparison and sensitivity). Each run gets a new output folder. Optional ANOVA presentation tables: EXPORT_ANOVA_SUMMARY <- TRUE.
 
-Open `bv_pipeline.Rproj` in RStudio. Install the required R packages once:
-
-```r
-install.packages(c("readxl", "dplyr", "lme4", "rstan", "ggplot2"))
-```
-
-RStan also requires a C++ toolchain. From the project directory, run:
-
-```r
-source("run_pipeline.R")
-```
-
-Or from a terminal: `Rscript run_pipeline.R validate input/my_study.xlsx`; after validation, `Rscript run_pipeline.R fit input/my_study.xlsx`. Each run writes a new folder under `output/`. Check `input_eligibility.csv` after validation, then fit diagnostics and `sensitivity_population_cvi.csv` after estimation.
-
-The default output contains summary tables, eligibility, diagnostics, sensitivity and figures. For intermediate datasets and posterior draws, set `OUTPUT_DETAIL <- TRUE` in `config.R`. To save full Stan fits, set `SAVE_FITS <- TRUE`.
-
-With one measurement per sample, the data alone do not separate analytical from biological variance: the **CVA prior from your method validation matters**. Review the sensitivity analysis and Stan diagnostics before interpreting CVI, CVG or RCV. Do not copy the steroid priors to amino acids.
-
-## Files
-
-- `input/study_template.xlsx`: Excel with one fictitious measurement and matching parameter row.
-- `examples/simulated_amino_acids.xlsx`: larger fictitious dataset to try the pipeline.
-- `config.R`: input path and analysis settings.
-- `docs/TECHNICAL_NOTES.md`: column definitions, censoring rules, model details and output descriptions.
-- `docs/VALIDATION.md`: checks performed and remaining validation.
-
-Adapted from Jorge Díaz-Garzón's steroid BV pipeline v7.26 (August 2026), informed by Røraas et al., *Clinical Chemistry* 2019;65:995–1005. The adaptation has not been numerically reproduced against the complete athlete dataset; see `docs/VALIDATION.md`.
+With one measurement per sample, CVA and CVI depend on the analytical prior. Check diagnostics.csv and the sensitivity scenarios. The adaptation has not been numerically compared with the complete steroid study; see docs/OUTPUT_MAP.md and docs/VALIDATION.md.

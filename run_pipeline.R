@@ -3,10 +3,13 @@
 local({
   if (!file.exists("config.R")) stop("Run from the extracted project folder (or open bv_pipeline.Rproj).")
   source("config.R", local = TRUE)
+  # RStudio sessions may carry trailing arguments unrelated to this run.
+  # Only command-line Rscript invocations may override config.R.
   args <- if (interactive()) character() else commandArgs(trailingOnly = TRUE)
   if (length(args) > 0) MODE <- args[1]
   if (length(args) > 1) INPUT_FILE <- args[2]
   if (!MODE %in% c("validate", "fit")) stop("MODE must be validate or fit.")
+  message("Requested mode: ", MODE, " | input: ", INPUT_FILE)
   deps <- c("readxl", "dplyr")
   if (MODE == "fit") deps <- c(deps, "lme4", if (RUN_BAYESIAN) "rstan", if (MAKE_PLOTS) "ggplot2")
   missing <- deps[!vapply(deps, requireNamespace, logical(1), quietly = TRUE)]
@@ -15,6 +18,7 @@ local({
   if (MODE == "fit") suppressPackageStartupMessages(library(lme4))
   source("R/input.R", local = TRUE)
   source("R/statistics.R", local = TRUE)
+  source("R/legacy_outputs.R", local = TRUE)
   source("R/plots.R", local = TRUE)
   if (!identical(PRIOR_WEIGHT_MODE, "relative")) abort("Only relative CVA/CVG weights are supported in this adaptation.")
   if (MIN_OBS_PER_SUBJECT < 2 || MIN_SUBJECTS < 2 ||
@@ -25,6 +29,7 @@ local({
   if (MODE == "fit" && RUN_SENSITIVITY && !RUN_BAYESIAN)
     abort("RUN_SENSITIVITY requires RUN_BAYESIAN = TRUE.")
 
+  INPUT_FILE <- resolve_input_path(INPUT_FILE)
   input <- read_study_inputs(INPUT_FILE)
   if (!is.null(SENSITIVITY_ANALYTES) && any(!SENSITIVITY_ANALYTES %in% input$analytes$analyte))
     abort("SENSITIVITY_ANALYTES must be included in the selected Analytes sheet.")
@@ -81,7 +86,8 @@ local({
     set.seed(STAN_SEED)
     table_results_list <- list(); anova_results <- list(); anova_boots <- list()
     trend_reports <- list(); trend_summaries <- list(); fit_diagnostics <- list()
-    sensitivity_rows <- list(); status_rows <- list(); posterior_draws <- list()
+    sensitivity_rows <- list(); sensitivity_subject_draws <- list()
+    status_rows <- list(); posterior_draws <- list()
     if (SAVE_FITS) dir.create(file.path(out, "fits"))
     if (RUN_BAYESIAN) {
       rstan::rstan_options(auto_write = TRUE)
@@ -89,8 +95,9 @@ local({
       model <- rstan::stan_model(file = "stan/bv_model.stan")
     }
     scenarios <- data.frame(
-      label = c("Default", "CVI_tighter", "CVI_wider", "CVI_half", "CVI_double",
-                "CVA_tighter", "CVA_wider", "CVA_half", "CVA_double"),
+      label = c("Source-based default", "Biological prior tight", "Biological prior relaxed",
+                "Half prior CV", "Double prior CV", "CVa tight", "CVa relaxed",
+                "Half prior CVa", "Double prior CVa"),
       prior_mult = c(1, 1, 1, .5, 2, 1, 1, 1, 1),
       weight = c(NA, .25, 1, NA, NA, NA, NA, NA, NA),
       cva_mult = c(1, 1, 1, 1, 1, 1, 1, .5, 2),
@@ -155,7 +162,8 @@ local({
             n_censored = sum(d$censored), n_quant = sum(d$censored == 0),
             conc_median = qs[2], conc_q1 = qs[1], conc_q3 = qs[3], cva_prior = a$prior_cva_pct)
           if (SAVE_FITS) saveRDS(table_results_list[[key]], file.path(out, "fits", paste0(key, "_main.rds")))
-          posterior_draws[[key]] <- cbind(data.frame(analyte = an, group = group), compute_draws_table(fit))
+          if (OUTPUT_DETAIL) posterior_draws[[key]] <-
+            cbind(data.frame(analyte = an, group = group), compute_draws_table(fit))
           add_status(an, group, "Bayesian", "fitted")
         }
       }
@@ -168,15 +176,15 @@ local({
         }
         if (OUTPUT_DETAIL) csv(da, paste0(key, "_anova_data"))
         ap <- calcular_anova_cv(da, cv_a_pct = a$prior_cva_pct, data_full = d)
-        ap$analyte <- an; ap$group <- group; ap$n_subjects <- length(unique(da$subject))
-        ap$cva_prior_pct <- a$prior_cva_pct
+        # Retain the original v7.26 ANOVA export fields and table builder.
+        ap$magnitude <- an; ap$sex <- group; ap$cv_a_used <- a$prior_cva_pct
         anova_results[[key]] <- ap
         add_status(an, group, "ANOVA", if (any(is.finite(ap$cv_within_raw))) "fitted" else "failed",
                    if (any(is.finite(ap$cv_within_raw))) "" else "No estimable ANOVA residual variance.")
         if (RUN_ANOVA_BOOTSTRAP && any(is.finite(ap$cv_within_raw))) {
           ab <- bootstrap_anova_cv(da, cv_a_pct = a$prior_cva_pct)
           if (!is.null(ab) && nrow(ab)) {
-            ab$analyte <- an; ab$group <- group; anova_boots[[key]] <- ab
+            ab$magnitude <- an; ab$sex_label <- group; anova_boots[[key]] <- ab
           }
         }
       }
@@ -193,39 +201,58 @@ local({
             add_status(an, group, paste0("Sensitivity:", sc$label), "failed", conditionMessage(sf)); next
           }
           if (k != 1L) record_diag(sf, an, group, sc$label)
-          sq <- q(compute_draws_table(sf)$CVI_est_pct)
           sensitivity_rows[[length(sensitivity_rows) + 1L]] <- data.frame(
-            analyte = an, group = group, scenario = sc$label,
-            cvi_q025_pct = sq[1], cvi_median_pct = sq[2], cvi_q975_pct = sq[3],
-            n_subjects = length(unique(d$subject)), n_obs = nrow(d))
+            Analyte = an, Sex = group, Scenario = sc$label,
+            Prior_mult = sc$prior_mult,
+            Weight = if (is.na(sc$weight)) h$weight_cv_within[1] else sc$weight,
+            CVa_mult = sc$cva_mult, CVa_weight = sc$cva_weight,
+            CVI_population_pct = fmt_med_ci(compute_draws_table(sf)$CVI_est_pct, 2))
+          if (MAKE_PLOTS && PLOT_SENSITIVITY) {
+            sensitivity_subject_draws[[length(sensitivity_subject_draws) + 1L]] <-
+              subject_posterior_draws(sf, an, group, scenario = sc$label)
+          }
           if (SAVE_FITS && k != 1L) saveRDS(sf, file.path(out, "fits", paste0(key, "_", sc$label, ".rds")))
           add_status(an, group, paste0("Sensitivity:", sc$label), "fitted")
-          csv(bind_rows(sensitivity_rows), "sensitivity_population_cvi")
+          csv(bind_rows(sensitivity_rows), "sensitivity_table")
         }
       }
       csv(bind_rows(exclusion_events), "excluded_subjects")
     }
-    csv(bind_rows(trend_summaries), "trend_summary")
-    csv(bind_rows(trend_reports), "trend_by_subject")
+    if (EXPORT_TREND) {
+      csv(bind_rows(trend_summaries), "trend_summary")
+      csv(bind_rows(trend_reports), "trend_by_subject")
+    }
     csv(bind_rows(exclusion_events), "excluded_subjects")
-    anova <- summarise_anova(anova_results, anova_boots)
-    csv(anova, "anova_summary")
+    csv(bind_rows(anova_results), "anova_results_by_sex")
+    csv(summarise_anova_bootstrap_v726(anova_boots), "anova_bootstrap_summary")
+    if (EXPORT_ANOVA_SUMMARY && length(anova_results)) {
+      anova_table <- build_anova_summary_table(
+        anova_results, anova_boots, order_vec = input$analytes$analyte)
+      csv(anova_table$formatted, "anova_summary_table_formatted")
+      csv(anova_table$numeric, "anova_summary_table_numeric")
+    }
+    if (EXPORT_OUTLIERS && length(exclusion_events)) {
+      events <- bind_rows(exclusion_events) %>%
+        filter(test %in% c("Trend", "Cochran", "Reed"))
+      csv(events, "anova_outliers_removed")
+      if (nrow(events)) csv(events %>% group_by(analyte, sex) %>% summarise(
+        n_total = n(), n_Trend = sum(test == "Trend"),
+        n_Cochran = sum(test == "Cochran"), n_Reed = sum(test == "Reed"),
+        subjects = paste(unique(subject), collapse = "; "), .groups = "drop"),
+        "anova_outliers_summary")
+    }
     if (OUTPUT_DETAIL) csv(bind_rows(anova_boots), "anova_bootstrap_draws_fraction")
     if (length(table_results_list)) {
       formatted <- build_summary_table_formatted(table_results_list, as_hypers(input$analytes))
       numeric <- build_summary_table_numeric(table_results_list)
-      for (nm in c("formatted", "numeric")) {
-        tab <- get(nm)
-        names(tab)[names(tab) == "Sex"] <- "Group"
-        names(tab)[names(tab) == "N_final"] <- "N_quantified"
-        names(tab)[names(tab) == "N_obs"] <- "N_used_in_model"
-        names(tab)[names(tab) == "II_Harris_Boyd"] <- "II"
-        tab$Unit <- input$analytes$unit[match(tab$Analyte, input$analytes$analyte)]
-        csv(tab, paste0("bayesian_summary_", nm))
-      }
+      csv(formatted, "summary_table_formatted")
+      csv(numeric, "summary_table_numeric")
+      parameters <- collect_bayesian_parameter_tables(table_results_list)
+      csv(parameters$main, "bayesian_results_by_sex")
+      csv(parameters$predicted, "dcvp_predicted_by_sex")
       if (OUTPUT_DETAIL) csv(bind_rows(posterior_draws), "bayesian_population_draws_pct")
       subject_summary <- summarise_subjects(table_results_list)
-      csv(subject_summary, "subject_cvp_pct")
+      if (OUTPUT_DETAIL) csv(subject_summary, "subject_cvp_pct")
       if (OUTPUT_DETAIL) {
         predictions <- bind_rows(lapply(table_results_list, function(r) {
           m <- as.data.frame(r$fit)
@@ -238,8 +265,12 @@ local({
         csv(predictions, "new_participant_cvp_percentiles")
       }
     } else subject_summary <- data.frame()
-    if (MAKE_PLOTS) make_plots(out, bind_rows(posterior_draws), anova,
-                              subject_summary, bind_rows(sensitivity_rows))
+    if (MAKE_PLOTS) {
+      plot_errors <- make_plots(out, table_results_list, input$analytes,
+                                anova_boots, bind_rows(sensitivity_subject_draws),
+                                scenarios$label)
+      for (problem in plot_errors) add_status("*", "*", "plot", "failed", problem)
+    }
     status <- bind_rows(status_rows)
     failures <- sum(status$status == "failed")
     writeLines(c(paste("Fit run finished. Failed stages:", failures),
@@ -248,6 +279,16 @@ local({
                file.path(out, "RUN_STATUS.txt"))
     if (failures) warning(failures, " stage(s) failed. See analysis_status.csv.")
   }
-  if (MODE == "fit") writeLines(capture.output(sessionInfo()), file.path(out, "sessionInfo.txt"))
+  if (MODE == "fit") {
+    writeLines(capture.output(sessionInfo()), file.path(out, "sessionInfo.txt"))
+    package_version_or_na <- function(package) tryCatch(
+      as.character(utils::packageVersion(package)), error = function(e) NA_character_)
+    csv(data.frame(Component = c("R", "rstan", "StanHeaders", "lme4", "dplyr", "ggplot2"),
+                   Version = c(R.version.string, package_version_or_na("rstan"),
+                               package_version_or_na("StanHeaders"),
+                               package_version_or_na("lme4"),
+                               package_version_or_na("dplyr"),
+                               package_version_or_na("ggplot2"))), "software_versions")
+  }
   message("Finished. Files: ", normalizePath(out))
 })
